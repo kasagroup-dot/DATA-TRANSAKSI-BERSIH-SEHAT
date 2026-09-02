@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BS Daily Tax Reconciler</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+  <style>
+    :root {
+      --bg: #F7F9FC;
+      --card: #FFFFFF;
+      --card-shadow: 0 4px 20px rgba(60, 90, 200, 0.08);
+      --grad-primary: linear-gradient(135deg, #6EE7B7 0%, #3B82F6 100%);
+      --accent-secondary: #F472B6;
+      --success: #10B981;
+      --warning: #F59E0B;
+      --error: #EF4444;
+      --text: #0F172A;
+      --text-muted: #64748B;
+      --border: #E2E8F0;
+      --border-strong: #CBD5E1;
+    }
+    [data-theme="dark"] {
+      --bg: #0B1120;
+      --card: #131B2E;
+      --card-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+      --text: #F1F5F9;
+      --text-muted: #94A3B8;
+      --border: #1E293B;
+      --border-strong: #334155;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      transition: background .25s ease, color .25s ease;
+    }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    h1, h2, h3 { font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+    button { font-family: inherit; cursor: pointer; }
+    input { font-family: inherit; }
+
+    /* ---------- Header ---------- */
+    header {
+      position: sticky; top: 0; z-index: 50;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      box-shadow: var(--card-shadow);
+      padding: 14px 20px;
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    }
+    .logo-mark {
+      width: 40px; height: 40px; border-radius: 12px;
+      background: var(--grad-primary);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; flex-shrink: 0;
+    }
+    .header-title { font-size: 17px; }
+    .header-sub { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+    .header-spacer { flex: 1; }
+    .date-badge {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; padding: 6px 12px;
+    }
+    .date-badge input[type="date"] {
+      border: none; background: transparent; color: var(--text);
+      font-size: 13px; font-weight: 600; font-family: 'JetBrains Mono', monospace;
+    }
+    .icon-btn {
+      width: 38px; height: 38px; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--card);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; transition: transform .15s ease, border-color .15s ease;
+    }
+    .icon-btn:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+    .btn-config {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border-radius: 10px; border: 1px solid var(--border);
+      background: var(--card); color: var(--text); font-size: 13px; font-weight: 600;
+    }
+    .btn-config:hover { border-color: var(--border-strong); }
+    .cfg-name { color: var(--text-muted); font-weight: 400; }
+
+    /* ---------- Layout ---------- */
+    main { max-width: 1180px; margin: 0 auto; padding: 24px 20px 60px; }
+    .grid-2col { display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px; align-items: start; }
+    @media (max-width: 880px) { .grid-2col { grid-template-columns: 1fr; } }
+
+    .panel {
+      background: var(--card); border-radius: 16px; box-shadow: var(--card-shadow);
+      padding: 20px; border: 1px solid var(--border);
+    }
+    .panel h2 { font-size: 15px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+
+    /* ---------- Drop zone ---------- */
+    .dropzone {
+      border: 2px dashed var(--border-strong);
+      border-radius: 14px;
+      padding: 34px 18px;
+      text-align: center;
+      transition: all .2s ease;
+      cursor: pointer;
+      background: var(--bg);
+    }
+    .dropzone.drag-over {
+      border-style: solid;
+      border-image: var(--grad-primary) 1;
+      background: linear-gradient(135deg, rgba(110,231,183,0.08), rgba(59,130,246,0.08));
+      transform: scale(1.015);
+    }
+    .dropzone.drop-flash { animation: dropFlash .5s ease; }
+    @keyframes dropFlash {
+      0% { transform: scale(1.05); background: linear-gradient(135deg, rgba(110,231,183,0.18), rgba(59,130,246,0.18)); }
+      100% { transform: scale(1); }
+    }
+    .dz-icon { font-size: 34px; margin-bottom: 8px; }
+    .dz-text { font-size: 14px; font-weight: 600; }
+    .dz-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+    .dz-count {
+      display: inline-block; margin-top: 12px; padding: 4px 12px;
+      border-radius: 999px; font-size: 12px; font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--bg); border: 1px solid var(--border);
+    }
+    .dz-count.full { background: var(--success); color: white; border-color: var(--success); }
+
+    .file-list { margin-top: 14px; max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+    .file-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 10px; border-radius: 8px; background: var(--bg);
+      font-size: 12px; border: 1px solid var(--border);
+    }
+    .file-row .fname { font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-row .fsize { color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+    .file-row .fdel {
+      border: none; background: transparent; color: var(--error);
+      font-size: 14px; padding: 2px 4px; border-radius: 4px; line-height: 1;
+    }
+    .file-row .fdel:hover { background: rgba(239,68,68,0.1); }
+
+    .process-btn {
+      width: 100%; margin-top: 16px; padding: 14px; border: none; border-radius: 12px;
+      background: var(--grad-primary); color: white; font-size: 15px; font-weight: 700;
+      box-shadow: 0 6px 18px rgba(59,130,246,0.28);
+      transition: transform .12s ease, opacity .2s ease;
+    }
+    .process-btn:hover:not(:disabled) { transform: translateY(-1px); }
+    .process-btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+
+    /* ---------- Branch cards ---------- */
+    .cards-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    @media (max-width: 520px) { .cards-grid { grid-template-columns: 1fr; } }
+    .branch-card {
+      border: 1px solid var(--border); border-radius: 12px; padding: 12px;
+      background: var(--bg); transition: border-color .2s ease, box-shadow .2s ease;
+    }
+    .branch-card .bc-top { display: flex; align-items: center; justify-content: space-between; }
+    .branch-card .bc-code { font-weight: 800; font-size: 14px; letter-spacing: -0.01em; }
+    .branch-card .bc-name { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+    .bc-status {
+      font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px;
+      display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+    }
+    .bc-status.pending { background: #E2E8F0; color: #64748B; }
+    [data-theme="dark"] .bc-status.pending { background: #1E293B; color: #94A3B8; }
+    .bc-status.parsing { background: #DBEAFE; color: #2563EB; animation: pulseSoft 1.1s ease-in-out infinite; }
+    .bc-status.uploading { background: #DBEAFE; color: #2563EB; animation: pulseSoft 1.1s ease-in-out infinite; }
+    .bc-status.filling { background: #FEF3C7; color: #B45309; }
+    .bc-status.filling .bc-spin { display: inline-block; animation: spin .8s linear infinite; }
+    .bc-status.verified { background: #D1FAE5; color: #047857; animation: bounceIn .45s ease; }
+    .bc-status.mismatch { background: #FEE2E2; color: #B91C1C; animation: shake .4s ease; }
+    .bc-status.error { background: #FEE2E2; color: #B91C1C; animation: shake .4s ease; }
+    @keyframes pulseSoft { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes bounceIn { 0% { transform: scale(.7); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
+    @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+
+    .bc-progress { height: 4px; border-radius: 2px; background: var(--border); margin-top: 10px; overflow: hidden; }
+    .bc-progress-fill {
+      height: 100%; width: 0%; border-radius: 2px;
+      background: linear-gradient(90deg, #6EE7B7, #3B82F6, #6EE7B7);
+      background-size: 200% 100%;
+      transition: width .35s ease;
+      animation: gradientMove 1.4s linear infinite;
+    }
+    @keyframes gradientMove { 0% { background-position: 0% 0; } 100% { background-position: 200% 0; } }
+
+    .bc-files { font-size: 10px; color: var(--text-muted); margin-top: 8px; font-family: 'JetBrains Mono', monospace; }
+    .bc-actions { display: flex; gap: 6px; margin-top: 8px; }
+    .bc-mini-btn {
+      flex: 1; font-size: 10px; font-weight: 700; padding: 5px 6px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--card); color: var(--text-muted);
+    }
+    .bc-mini-btn:hover { border-color: var(--border-strong); color: var(--text); }
+
+    /* ---------- Results panel ---------- */
+    .results-panel { margin-top: 20px; }
+    .results-summary { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+    .results-summary .rs-count { font-size: 13px; font-weight: 700; }
+    .download-btn {
+      margin-left: auto; padding: 11px 20px; border: none; border-radius: 10px;
+      background: var(--accent-secondary); color: white; font-weight: 700; font-size: 13px;
+      box-shadow: 0 6px 16px rgba(244,114,182,0.28);
+    }
+    .download-btn:disabled { opacity: .35; cursor: not-allowed; box-shadow: none; }
+
+    .accordion-item { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
+    .accordion-head {
+      display: flex; align-items: center; gap: 10px; padding: 11px 14px;
+      cursor: pointer; background: var(--bg); font-size: 13px;
+    }
+    .accordion-head .ah-code { font-weight: 800; width: 42px; }
+    .accordion-head .ah-name { color: var(--text-muted); flex: 1; }
+    .accordion-body { padding: 0 14px 14px; font-size: 12px; display: none; }
+    .accordion-item.open .accordion-body { display: block; }
+    .cmp-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    .cmp-table th { text-align: left; color: var(--text-muted); font-weight: 600; font-size: 11px; padding: 4px 6px; }
+    .cmp-table td { padding: 4px 6px; font-family: 'JetBrains Mono', monospace; font-size: 12px; border-top: 1px solid var(--border); }
+    .warn-line { color: var(--warning); font-size: 11px; margin-top: 6px; }
+
+    /* ---------- Misc ---------- */
+    .empty-state { text-align: center; color: var(--text-muted); font-size: 13px; padding: 20px 0; }
+    .badge-ok { color: var(--success); }
+    .badge-bad { color: var(--error); }
+
+    /* ---------- Modal ---------- */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(15,23,42,.45);
+      display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px;
+    }
+    .modal-backdrop.show { display: flex; }
+    .modal {
+      background: var(--card); border-radius: 16px; padding: 22px; width: 100%; max-width: 420px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.25);
+    }
+    .modal h3 { font-size: 15px; margin-bottom: 4px; }
+    .modal p { font-size: 12px; color: var(--text-muted); margin: 6px 0 14px; line-height: 1.5; }
+    .modal input[type="text"] {
+      width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--bg); color: var(--text); font-size: 13px; margin-bottom: 12px;
+    }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    .modal-actions button { padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+    .modal-actions .primary { background: var(--grad-primary); color: white; border: none; }
+
+    /* ---------- Toast ---------- */
+    #toast-wrap { position: fixed; bottom: 20px; right: 20px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
+    .toast {
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 11px 16px; font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,.15);
+      animation: toastIn .25s ease; max-width: 320px;
+    }
+    .toast.success { border-left: 3px solid var(--success); }
+    .toast.error { border-left: 3px solid var(--error); }
+    .toast.warning { border-left: 3px solid var(--warning); }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo-mark">🌿</div>
+    <div>
+      <div class="header-title">BS Daily Tax Reconciler</div>
+      <div class="header-sub" id="cfg-status">Master Spreadsheet belum diset</div>
+    </div>
+    <div class="header-spacer"></div>
+    <div class="date-badge">
+      <span>📅</span>
+      <input type="date" id="date-input">
+    </div>
+    <button class="btn-config" id="btn-config">⚙️ Set Master Spreadsheet ID</button>
+    <button class="btn-config" id="btn-sync-rates">🔄 Update Tarif Pajak</button>
+    <button class="btn-config" id="btn-clear-tx" style="color:#B91C1C; border-color:#FCA5A5;">🗑️ Hapus Transaksi</button>
+    <button class="icon-btn" id="btn-dark" title="Dark mode">🌙</button>
+  </header>
+
+  <main>
+    <div class="grid-2col">
+      <!-- LEFT: Drop zone -->
+      <div class="panel">
+        <h2>📥 Upload File Harian</h2>
+        <div class="dropzone" id="dropzone">
+          <div class="dz-icon">📂</div>
+          <div class="dz-text">Drag & drop 16 file di sini</div>
+          <div class="dz-sub">atau klik untuk browse — pola nama: <span class="mono">kode_1.xls</span> / <span class="mono">kode_2.xls</span></div>
+          <div class="dz-count" id="dz-count">0 / 16 files ready</div>
+          <input type="file" id="file-input" multiple accept=".xls" style="display:none">
+        </div>
+        <div class="file-list" id="file-list"></div>
+        <button class="process-btn" id="btn-process" disabled>🚀 Proses Semua</button>
+      </div>
+
+      <!-- RIGHT: Branch cards -->
+      <div class="panel">
+        <h2>🏢 Status Cabang</h2>
+        <div class="cards-grid" id="cards-grid"></div>
+      </div>
+    </div>
+
+    <!-- RESULTS -->
+    <div class="panel results-panel">
+      <div class="results-summary">
+        <h2 style="margin:0;">📊 Hasil Verifikasi</h2>
+        <span class="rs-count mono" id="rs-count"></span>
+        <button class="download-btn" id="btn-download" disabled>⬇️ Download XLSX Final</button>
+      </div>
+      <div id="results-body">
+        <div class="empty-state">Belum ada hasil. Upload 16 file lalu klik "Proses Semua".</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Config modal -->
+  <div class="modal-backdrop" id="modal-backdrop">
+    <div class="modal">
+      <h3>⚙️ Set Master Spreadsheet ID</h3>
+      <p>Tempel ID atau URL Google Spreadsheet master (harus punya sheet PI, MT, KG, BI, PK, BSD, BG, BD, dan REKAP).</p>
+      <input type="text" id="cfg-input" placeholder="1AbCдефID... atau https://docs.google.com/spreadsheets/d/...">
+      <div class="modal-actions">
+        <button id="cfg-cancel">Batal</button>
+        <button class="primary" id="cfg-save">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete transactions confirmation modal -->
+  <div class="modal-backdrop" id="clear-modal-backdrop">
+    <div class="modal">
+      <h3>🗑️ Hapus Transaksi Hari Ini</h3>
+      <p>Ini akan menghapus <b>kolom A sampai Q</b> (data transaksi) di <b>semua 8 sheet cabang</b>. Semua rumus/formula <b>tidak akan hilang</b> — cuma datanya yang dibersihkan, siap dipakai lagi besok. Aksi ini <b>tidak bisa dibatalkan</b>. Yakin mau lanjut?</p>
+      <div class="modal-actions">
+        <button id="clear-cancel">Batal</button>
+        <button class="primary" id="clear-confirm" style="background:#EF4444;">Ya, Hapus Semua</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-wrap"></div>
+
+  <script>
+    // ==========================================================================
+    // ⚠️ KONFIGURASI WAJIB — GANTI BARIS DI BAWAH INI ⚠️
+    // ==========================================================================
+    // Isi dengan URL Web App Apps Script kamu (yang diakhiri /exec).
+    // Cara dapetin URL ini ada di panduan migrasi, bagian "Deploy ulang Code.gs".
+    var APPS_SCRIPT_URL = 'PASTE_URL_WEB_APP_APPS_SCRIPT_KAMU_DISINI';
+
+    // ==========================================================================
+    // STATE
+    // ==========================================================================
+    var BRANCHES = [
+      { code: 'PI', name: 'Pondok Indah' },
+      { code: 'MT', name: 'Wahid Hasyim' },
+      { code: 'KG', name: 'Kelapa Gading' },
+      { code: 'BI', name: 'Bintaro' },
+      { code: 'PK', name: 'Puri' },
+      { code: 'BSD', name: 'BSD' },
+      { code: 'BG', name: 'Bogor' },
+      { code: 'BD', name: 'Bandung' }
+    ];
+    var BRANCH_CODES = BRANCHES.map(function (b) { return b.code; });
+
+    var state = {
+      files: {},          // key: "pi_1" -> File object
+      cardStatus: {},      // key: "PI" -> 'pending'|'parsing'|'uploading'|'filling'|'verified'|'mismatch'|'error'
+      cardResult: {},       // key: "PI" -> result object from processBranch
+      masterSpreadsheetId: null,
+      processing: false
+    };
+    BRANCH_CODES.forEach(function (c) { state.cardStatus[c] = 'pending'; });
+
+    // ==========================================================================
+    // DOM REFS
+    // ==========================================================================
+    var el = {
+      dateInput: document.getElementById('date-input'),
+      cfgStatus: document.getElementById('cfg-status'),
+      btnConfig: document.getElementById('btn-config'),
+      btnDark: document.getElementById('btn-dark'),
+      dropzone: document.getElementById('dropzone'),
+      fileInput: document.getElementById('file-input'),
+      dzCount: document.getElementById('dz-count'),
+      fileList: document.getElementById('file-list'),
+      btnProcess: document.getElementById('btn-process'),
+      cardsGrid: document.getElementById('cards-grid'),
+      resultsBody: document.getElementById('results-body'),
+      rsCount: document.getElementById('rs-count'),
+      btnDownload: document.getElementById('btn-download'),
+      modalBackdrop: document.getElementById('modal-backdrop'),
+      cfgInput: document.getElementById('cfg-input'),
+      cfgSave: document.getElementById('cfg-save'),
+      cfgCancel: document.getElementById('cfg-cancel'),
+      btnSyncRates: document.getElementById('btn-sync-rates'),
+      btnClearTx: document.getElementById('btn-clear-tx'),
+      clearModalBackdrop: document.getElementById('clear-modal-backdrop'),
+      clearCancel: document.getElementById('clear-cancel'),
+      clearConfirm: document.getElementById('clear-confirm'),
+      toastWrap: document.getElementById('toast-wrap')
+    };
+
+    // ==========================================================================
+    // INIT
+    // ==========================================================================
+    function init() {
+      el.dateInput.value = todayIsoDate_();
+      renderCards();
+      setupDropzone();
+      setupConfigModal();
+      setupSyncRates();
+      setupClearTxModal();
+      setupDarkMode();
+      loadConfig();
+      loadDraftState();
+
+      el.btnProcess.addEventListener('click', processAll);
+      el.btnDownload.addEventListener('click', downloadFinal);
+      el.dateInput.addEventListener('change', function () {
+        loadDraftState();
+      });
+    }
+
+    function todayIsoDate_() {
+      var d = new Date();
+      var m = String(d.getMonth() + 1).padStart(2, '0');
+      var day = String(d.getDate()).padStart(2, '0');
+      return d.getFullYear() + '-' + m + '-' + day;
+    }
+
+    function isoToDDMMYYYY_(iso) {
+      var parts = iso.split('-'); // YYYY-MM-DD
+      return parts[2] + '-' + parts[1] + '-' + parts[0];
+    }
+
+    // ==========================================================================
+    // CONFIG (Master Spreadsheet ID)
+    // ==========================================================================
+    function loadConfig() {
+      runGS('getConfig', {}).then(function (res) {
+        if (res && res.ok && res.masterSpreadsheetId) {
+          state.masterSpreadsheetId = res.masterSpreadsheetId;
+          el.cfgStatus.textContent = res.spreadsheetName
+            ? ('Master: ' + res.spreadsheetName)
+            : 'Master Spreadsheet ID tersimpan (nama tidak terbaca)';
+          if (res.warning) toast(res.warning, 'warning');
+        } else {
+          el.cfgStatus.textContent = 'Master Spreadsheet belum diset';
+        }
+      }).catch(function (err) {
+        el.cfgStatus.textContent = 'Gagal memuat konfigurasi';
+        toast('Gagal memuat konfigurasi: ' + err, 'error');
+      });
+    }
+
+    function setupConfigModal() {
+      el.btnConfig.addEventListener('click', function () {
+        el.cfgInput.value = state.masterSpreadsheetId || '';
+        el.modalBackdrop.classList.add('show');
+        el.cfgInput.focus();
+      });
+      el.cfgCancel.addEventListener('click', function () {
+        el.modalBackdrop.classList.remove('show');
+      });
+      el.modalBackdrop.addEventListener('click', function (e) {
+        if (e.target === el.modalBackdrop) el.modalBackdrop.classList.remove('show');
+      });
+      el.cfgSave.addEventListener('click', function () {
+        var val = el.cfgInput.value.trim();
+        if (!val) { toast('Spreadsheet ID tidak boleh kosong', 'error'); return; }
+        el.cfgSave.disabled = true;
+        el.cfgSave.textContent = 'Menyimpan...';
+        runGS('setConfig', { masterSpreadsheetId: val }).then(function (res) {
+          el.cfgSave.disabled = false;
+          el.cfgSave.textContent = 'Simpan';
+          if (res && res.ok) {
+            state.masterSpreadsheetId = val;
+            el.cfgStatus.textContent = 'Master: ' + res.spreadsheetName;
+            el.modalBackdrop.classList.remove('show');
+            toast('Master Spreadsheet berhasil diset: ' + res.spreadsheetName, 'success');
+          } else {
+            toast((res && res.error) || 'Gagal menyimpan konfigurasi', 'error');
+          }
+        }).catch(function (err) {
+          el.cfgSave.disabled = false;
+          el.cfgSave.textContent = 'Simpan';
+          toast('Error: ' + err, 'error');
+        });
+      });
+    }
+
+    // ==========================================================================
+    // UPDATE TARIF PAJAK (sync AA2/AB2 semua cabang dari BRANCH_TAX_RATES di Code.gs)
+    // ==========================================================================
+    function setupSyncRates() {
+      el.btnSyncRates.addEventListener('click', function () {
+        el.btnSyncRates.disabled = true;
+        el.btnSyncRates.textContent = '⏳ Menyinkronkan...';
+        runGS('applyAllTaxRates', {}).then(function (res) {
+          el.btnSyncRates.disabled = false;
+          el.btnSyncRates.textContent = '🔄 Update Tarif Pajak';
+          if (res && res.ok) {
+            toast('Tarif pajak berhasil disinkronkan ke 8 cabang.', 'success');
+          } else {
+            var failed = (res && res.results || []).filter(function (r) { return !r.ok; });
+            if (failed.length > 0) {
+              toast('Sebagian gagal: ' + failed.map(function (r) { return r.branchCode + ' (' + r.message + ')'; }).join(', '), 'error');
+            } else {
+              toast((res && res.error) || 'Gagal update tarif pajak', 'error');
+            }
+          }
+        }).catch(function (err) {
+          el.btnSyncRates.disabled = false;
+          el.btnSyncRates.textContent = '🔄 Update Tarif Pajak';
+          toast('Error: ' + err, 'error');
+        });
+      });
+    }
+
+    // ==========================================================================
+    // HAPUS TRANSAKSI (clear A:Q semua cabang, formula tetap utuh)
+    // ==========================================================================
+    function setupClearTxModal() {
+      el.btnClearTx.addEventListener('click', function () {
+        el.clearModalBackdrop.classList.add('show');
+      });
+      el.clearCancel.addEventListener('click', function () {
+        el.clearModalBackdrop.classList.remove('show');
+      });
+      el.clearModalBackdrop.addEventListener('click', function (e) {
+        if (e.target === el.clearModalBackdrop) el.clearModalBackdrop.classList.remove('show');
+      });
+      el.clearConfirm.addEventListener('click', function () {
+        el.clearConfirm.disabled = true;
+        el.clearConfirm.textContent = 'Menghapus...';
+        runGS('clearAllTransactionsData', {}).then(function (res) {
+          el.clearConfirm.disabled = false;
+          el.clearConfirm.textContent = 'Ya, Hapus Semua';
+          el.clearModalBackdrop.classList.remove('show');
+          if (res && res.ok) {
+            toast('Semua transaksi (kolom A:Q) berhasil dihapus di 8 cabang. Formula tetap utuh.', 'success');
+          } else {
+            var failed = (res && res.results || []).filter(function (r) { return !r.ok; });
+            toast('Sebagian gagal dihapus: ' + failed.map(function (r) { return r.branchCode; }).join(', '), 'error');
+          }
+          // Reset tampilan lokal — data di sheet sudah kosong, jadi status lama sudah tidak relevan.
+          BRANCH_CODES.forEach(function (c) {
+            state.cardStatus[c] = 'pending';
+            delete state.cardResult[c];
+          });
+          state.files = {};
+          renderCards();
+          renderFileList();
+          renderResults();
+          saveDraftState();
+        }).catch(function (err) {
+          el.clearConfirm.disabled = false;
+          el.clearConfirm.textContent = 'Ya, Hapus Semua';
+          toast('Error: ' + err, 'error');
+        });
+      });
+    }
+
+    // ==========================================================================
+    // DARK MODE
+    // ==========================================================================
+    function setupDarkMode() {
+      var saved = null;
+      try { saved = localStorage.getItem('bsdtr_theme'); } catch (e) {}
+      if (saved === 'dark') applyTheme_('dark');
+      el.btnDark.addEventListener('click', function () {
+        var current = document.documentElement.getAttribute('data-theme');
+        applyTheme_(current === 'dark' ? 'light' : 'dark');
+      });
+    }
+    function applyTheme_(theme) {
+      if (theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        el.btnDark.textContent = '☀️';
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+        el.btnDark.textContent = '🌙';
+      }
+      try { localStorage.setItem('bsdtr_theme', theme); } catch (e) {}
+    }
+
+    // ==========================================================================
+    // DROP ZONE + FILE PARSING
+    // ==========================================================================
+    var FILE_PATTERN = /^(pi|mt|kg|bi|pk|bsd|bg|bd)_(1|2)\.xls$/i;
+
+    function setupDropzone() {
+      el.dropzone.addEventListener('click', function () { el.fileInput.click(); });
+      el.fileInput.addEventListener('change', function (e) {
+        handleFiles(e.target.files);
+        el.fileInput.value = '';
+      });
+      ['dragenter', 'dragover'].forEach(function (evt) {
+        el.dropzone.addEventListener(evt, function (e) {
+          e.preventDefault(); e.stopPropagation();
+          el.dropzone.classList.add('drag-over');
+        });
+      });
+      ['dragleave', 'drop'].forEach(function (evt) {
+        el.dropzone.addEventListener(evt, function (e) {
+          e.preventDefault(); e.stopPropagation();
+          el.dropzone.classList.remove('drag-over');
+        });
+      });
+      el.dropzone.addEventListener('drop', function (e) {
+        el.dropzone.classList.add('drop-flash');
+        setTimeout(function () { el.dropzone.classList.remove('drop-flash'); }, 500);
+        var dt = e.dataTransfer;
+        if (dt && dt.files) handleFiles(dt.files);
+      });
+    }
+
+    function handleFiles(fileList) {
+      var accepted = 0, rejected = [];
+      for (var i = 0; i < fileList.length; i++) {
+        var f = fileList[i];
+        var m = f.name.match(FILE_PATTERN);
+        if (!m) { rejected.push(f.name); continue; }
+        var key = m[1].toLowerCase() + '_' + m[2];
+        state.files[key] = f;
+        accepted++;
+      }
+      if (rejected.length > 0) {
+        toast('File tidak sesuai pola nama, diabaikan: ' + rejected.join(', '), 'warning');
+      }
+      if (accepted > 0) toast(accepted + ' file diterima.', 'success');
+      renderFileList();
+    }
+
+    function renderFileList() {
+      var keys = Object.keys(state.files).sort();
+      el.fileList.innerHTML = '';
+      keys.forEach(function (key) {
+        var f = state.files[key];
+        var row = document.createElement('div');
+        row.className = 'file-row';
+        row.innerHTML =
+          '<span class="fname">' + escapeHtml_(key + '.xls — ' + f.name) + '</span>' +
+          '<span class="fsize">' + formatBytes_(f.size) + '</span>' +
+          '<button class="fdel" data-key="' + key + '">✕</button>';
+        el.fileList.appendChild(row);
+      });
+      el.fileList.querySelectorAll('.fdel').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          delete state.files[btn.getAttribute('data-key')];
+          renderFileList();
+        });
+      });
+
+      var count = keys.length;
+      el.dzCount.textContent = count + ' / 16 files ready';
+      el.dzCount.classList.toggle('full', count === 16);
+      el.btnProcess.disabled = count !== 16 || state.processing;
+    }
+
+    function formatBytes_(n) {
+      if (n < 1024) return n + ' B';
+      if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+      return (n / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+    function escapeHtml_(s) {
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+
+    /**
+     * Baca file .xls (sebenarnya UTF-16LE TSV) dan kembalikan array baris (array of arrays string).
+     * Baris kosong dibuang. Kolom trailing kosong (dari trailing tab) dibuang.
+     */
+    function readTsvFile_(file) {
+      return new Promise(function (resolve, reject) {
+        var reader = new FileReader();
+        reader.onload = function () {
+          try {
+            var buffer = reader.result;
+            var decoder = new TextDecoder('utf-16le');
+            var text = decoder.decode(buffer);
+            if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // buang BOM char
+            var lines = text.split(/\r\n|\n/).filter(function (l) { return l.length > 0; });
+            var rows = lines.map(function (line) {
+              var cols = line.split('\t');
+              if (cols.length && cols[cols.length - 1] === '') cols.pop(); // buang trailing kosong
+              return cols;
+            });
+            resolve(rows);
+          } catch (err) { reject(err); }
+        };
+        reader.onerror = function () { reject(new Error('Gagal membaca file ' + file.name)); };
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    /**
+     * Parse & siapkan payload {data1, data2} untuk satu cabang dari 2 File object.
+     */
+    function parseBranchFiles_(file1, file2) {
+      return Promise.all([readTsvFile_(file1), readTsvFile_(file2)]).then(function (results) {
+        var rows1 = results[0].slice(1); // buang header
+        var rows2 = results[1].slice(1); // buang header
+
+        // Sort ascending by kolom F (index 5 = "Jam transaksi", format HH:mm:ss -> aman disort sebagai string)
+        rows1.sort(function (a, b) {
+          var ta = a[5] || '', tb = b[5] || '';
+          return ta < tb ? -1 : (ta > tb ? 1 : 0);
+        });
+
+        var data2 = rows2.map(function (r) {
+          return [r[0] || '', r[1] || '', r[2] || '', Number(r[3]) || 0, r[4] || ''];
+        });
+
+        return { data1: rows1, data2: data2 };
+      });
+    }
+
+    // ==========================================================================
+    // BRANCH CARDS
+    // ==========================================================================
+    var STATUS_LABEL = {
+      pending: '⏳ Pending',
+      parsing: '📥 Parsing',
+      uploading: '📤 Uploading',
+      filling: '<span class="bc-spin">⚙️</span> Filling',
+      verified: '✅ Verified',
+      mismatch: '❌ Mismatch',
+      error: '⚠️ Error'
+    };
+    var STATUS_PROGRESS = { pending: 0, parsing: 25, uploading: 45, filling: 75, verified: 100, mismatch: 100, error: 100 };
+
+    function renderCards() {
+      el.cardsGrid.innerHTML = '';
+      BRANCHES.forEach(function (b) {
+        var card = document.createElement('div');
+        card.className = 'branch-card';
+        card.id = 'card-' + b.code;
+        el.cardsGrid.appendChild(card);
+        updateCard(b.code);
+      });
+    }
+
+    function updateCard(code) {
+      var card = document.getElementById('card-' + code);
+      if (!card) return;
+      var status = state.cardStatus[code];
+      var branch = BRANCHES.filter(function (b) { return b.code === code; })[0];
+      var haveFiles = !!(state.files[code.toLowerCase() + '_1'] && state.files[code.toLowerCase() + '_2']);
+      var progress = STATUS_PROGRESS[status] || 0;
+
+      card.innerHTML =
+        '<div class="bc-top">' +
+          '<div><div class="bc-code">' + code + '</div><div class="bc-name">' + branch.name + '</div></div>' +
+          '<span class="bc-status ' + status + '">' + STATUS_LABEL[status] + '</span>' +
+        '</div>' +
+        '<div class="bc-progress"><div class="bc-progress-fill" style="width:' + progress + '%"></div></div>' +
+        '<div class="bc-files">' + (haveFiles ? '2/2 file siap' : '0/2 file siap') + '</div>' +
+        '<div class="bc-actions">' +
+          '<button class="bc-mini-btn" data-action="process" data-code="' + code + '">Proses Cabang Ini</button>' +
+          '<button class="bc-mini-btn" data-action="reset" data-code="' + code + '">Reset</button>' +
+        '</div>';
+
+      card.querySelector('[data-action="process"]').addEventListener('click', function () {
+        if (!haveFiles) { toast('Upload dulu 2 file untuk cabang ' + code, 'warning'); return; }
+        processOneBranch(code);
+      });
+      card.querySelector('[data-action="reset"]').addEventListener('click', function () {
+        state.cardStatus[code] = 'pending';
+        delete state.cardResult[code];
+        delete state.files[code.toLowerCase() + '_1'];
+        delete state.files[code.toLowerCase() + '_2'];
+        updateCard(code);
+        renderFileList();
+        renderResults();
+        saveDraftState();
+      });
+    }
+
+    // ==========================================================================
+    // PROCESSING
+    // ==========================================================================
+    function processAll() {
+      if (state.processing) return;
+      var missing = [];
+      BRANCH_CODES.forEach(function (c) {
+        if (!state.files[c.toLowerCase() + '_1'] || !state.files[c.toLowerCase() + '_2']) missing.push(c);
+      });
+      if (missing.length > 0) {
+        toast('File belum lengkap untuk cabang: ' + missing.join(', '), 'error');
+        return;
+      }
+      state.processing = true;
+      el.btnProcess.disabled = true;
+      el.btnProcess.textContent = '⏳ Memproses 8 cabang...';
+
+      // Proses dengan concurrency terbatas (4 cabang paralel) supaya tidak membebani quota GAS.
+      runWithConcurrency_(BRANCH_CODES, 4, function (code) {
+        return processOneBranch(code);
+      }).then(function () {
+        state.processing = false;
+        el.btnProcess.textContent = '🚀 Proses Semua';
+        renderFileList();
+        maybeCelebrate_();
+      });
+    }
+
+    function runWithConcurrency_(items, limit, worker) {
+      return new Promise(function (resolve) {
+        var idx = 0, active = 0, done = 0;
+        function next() {
+          if (done >= items.length) { resolve(); return; }
+          while (active < limit && idx < items.length) {
+            (function (item) {
+              active++;
+              idx++;
+              worker(item).catch(function () {}).then(function () {
+                active--; done++; next();
+              });
+            })(items[idx]);
+          }
+        }
+        next();
+      });
+    }
+
+    function processOneBranch(code) {
+      state.cardStatus[code] = 'parsing';
+      updateCard(code);
+
+      var f1 = state.files[code.toLowerCase() + '_1'];
+      var f2 = state.files[code.toLowerCase() + '_2'];
+
+      return parseBranchFiles_(f1, f2).then(function (parsed) {
+        state.cardStatus[code] = 'uploading';
+        updateCard(code);
+
+        var payload = {
+          branchCode: code,
+          data1: parsed.data1,
+          data2: parsed.data2,
+          date: isoToDDMMYYYY_(el.dateInput.value)
+        };
+
+        state.cardStatus[code] = 'filling';
+        updateCard(code);
+
+        return runGSWithRetry('processBranch', payload, 2);
+      }).then(function (result) {
+        state.cardResult[code] = result;
+        state.cardStatus[code] = result && result.ok ? 'verified' : (result ? 'mismatch' : 'error');
+        updateCard(code);
+        renderResults();
+        saveDraftState();
+        return result;
+      }).catch(function (err) {
+        state.cardResult[code] = { ok: false, branchCode: code, message: 'Gagal: ' + err };
+        state.cardStatus[code] = 'error';
+        updateCard(code);
+        renderResults();
+        saveDraftState();
+      });
+    }
+
+    function maybeCelebrate_() {
+      var allVerified = BRANCH_CODES.every(function (c) { return state.cardStatus[c] === 'verified'; });
+      if (allVerified && typeof confetti === 'function') {
+        confetti({ particleCount: 120, spread: 75, origin: { y: 0.6 } });
+        toast('🎉 Semua 8 cabang terverifikasi!', 'success');
+      }
+    }
+
+    // ==========================================================================
+    // RESULTS PANEL
+    // ==========================================================================
+    function renderResults() {
+      var codesWithResult = BRANCH_CODES.filter(function (c) { return !!state.cardResult[c]; });
+      if (codesWithResult.length === 0) {
+        el.resultsBody.innerHTML = '<div class="empty-state">Belum ada hasil. Upload 16 file lalu klik "Proses Semua".</div>';
+        el.rsCount.textContent = '';
+        el.btnDownload.disabled = true;
+        return;
+      }
+
+      var okCount = codesWithResult.filter(function (c) { return state.cardResult[c].ok; }).length;
+      el.rsCount.textContent = okCount + ' / 8 verified';
+      el.btnDownload.disabled = !(okCount === 8 && codesWithResult.length === 8);
+
+      el.resultsBody.innerHTML = '';
+      BRANCH_CODES.forEach(function (code) {
+        var r = state.cardResult[code];
+        if (!r) return;
+        var item = document.createElement('div');
+        item.className = 'accordion-item';
+        var okBadge = r.ok ? '<span class="badge-ok">✓ Match</span>' : '<span class="badge-bad">✗ ' + (r.message || 'Mismatch') + '</span>';
+
+        var warningsHtml = '';
+        if (r.warnings && r.warnings.length > 0) {
+          warningsHtml = r.warnings.map(function (w) { return '<div class="warn-line">⚠️ ' + escapeHtml_(w) + '</div>'; }).join('');
+        }
+
+        item.innerHTML =
+          '<div class="accordion-head">' +
+            '<span class="ah-code">' + code + '</span>' +
+            '<span class="ah-name">' + (r.branchName || '') + '</span>' +
+            okBadge +
+          '</div>' +
+          '<div class="accordion-body">' +
+            '<table class="cmp-table">' +
+              '<tr><th></th><th>Target</th><th>Aktual</th><th>Selisih</th></tr>' +
+              '<tr><td>Pijat</td><td>' + fmtNum_(r.targetPijat) + '</td><td>' + fmtNum_(r.actualPijat) + '</td><td>' + fmtNum_(r.diffPijat) + '</td></tr>' +
+              '<tr><td>Refleksi</td><td>' + fmtNum_(r.targetRefleksi) + '</td><td>' + fmtNum_(r.actualRefleksi) + '</td><td>' + fmtNum_(r.diffRefleksi) + '</td></tr>' +
+            '</table>' +
+            warningsHtml +
+          '</div>';
+
+        item.querySelector('.accordion-head').addEventListener('click', function () {
+          item.classList.toggle('open');
+        });
+        el.resultsBody.appendChild(item);
+      });
+    }
+
+    function fmtNum_(n) {
+      if (n === undefined || n === null || isNaN(n)) return '—';
+      return n.toLocaleString('id-ID');
+    }
+
+    // ==========================================================================
+    // DOWNLOAD FINAL
+    // ==========================================================================
+    function downloadFinal() {
+      el.btnDownload.disabled = true;
+      el.btnDownload.textContent = '⏳ Menyiapkan file...';
+      var dateStr = isoToDDMMYYYY_(el.dateInput.value);
+      runGS('exportFinalXlsx', dateStr).then(function (res) {
+        el.btnDownload.textContent = '⬇️ Download XLSX Final';
+        el.btnDownload.disabled = false;
+        if (!res || !res.ok) {
+          toast((res && res.error) || 'Gagal export file final', 'error');
+          return;
+        }
+        var byteChars = atob(res.base64);
+        var byteNumbers = new Array(byteChars.length);
+        for (var i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+        var byteArray = new Uint8Array(byteNumbers);
+        var blob = new Blob([byteArray], { type: res.mimeType });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = res.filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+        toast('File final berhasil di-download.', 'success');
+      }).catch(function (err) {
+        el.btnDownload.textContent = '⬇️ Download XLSX Final';
+        el.btnDownload.disabled = false;
+        toast('Error: ' + err, 'error');
+      });
+    }
+
+    // ==========================================================================
+    // BACKEND API WRAPPER (fetch ke Apps Script Web App, gantinya google.script.run)
+    // ==========================================================================
+    function runGS(fnName, arg) {
+      if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.indexOf('PASTE_URL') !== -1) {
+        return Promise.reject('APPS_SCRIPT_URL belum diisi — cek baris paling atas file ini, ganti dengan URL Web App Apps Script kamu.');
+      }
+      return fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        // PENTING: text/plain, BUKAN application/json — supaya browser tidak kirim
+        // CORS preflight request (OPTIONS) yang tidak bisa dijawab Apps Script.
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: fnName, payload: arg })
+      }).then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status + ' dari server');
+        return res.json();
+      });
+    }
+
+    function runGSWithRetry(fnName, arg, retries) {
+      return runGS(fnName, arg).catch(function (err) {
+        if (retries > 0) {
+          return new Promise(function (resolve) { setTimeout(resolve, 800); })
+            .then(function () { return runGSWithRetry(fnName, arg, retries - 1); });
+        }
+        throw err;
+      });
+    }
+
+    // ==========================================================================
+    // TOAST
+    // ==========================================================================
+    function toast(msg, type) {
+      var t = document.createElement('div');
+      t.className = 'toast ' + (type || 'success');
+      t.textContent = msg;
+      el.toastWrap.appendChild(t);
+      setTimeout(function () {
+        t.style.opacity = '0';
+        t.style.transition = 'opacity .3s ease';
+        setTimeout(function () { t.remove(); }, 300);
+      }, 4200);
+    }
+
+    // ==========================================================================
+    // DRAFT STATE (localStorage) — hanya status & hasil, bukan file mentah
+    // ==========================================================================
+    function draftKey_() { return 'bsdtr_draft_' + el.dateInput.value; }
+
+    function saveDraftState() {
+      try {
+        var payload = { cardStatus: state.cardStatus, cardResult: state.cardResult };
+        localStorage.setItem(draftKey_(), JSON.stringify(payload));
+      } catch (e) { /* localStorage penuh/diblokir — abaikan, non-kritis */ }
+    }
+
+    function loadDraftState() {
+      BRANCH_CODES.forEach(function (c) {
+        state.cardStatus[c] = 'pending';
+        delete state.cardResult[c];
+      });
+      try {
+        var raw = localStorage.getItem(draftKey_());
+        if (raw) {
+          var data = JSON.parse(raw);
+          if (data.cardStatus) state.cardStatus = data.cardStatus;
+          if (data.cardResult) state.cardResult = data.cardResult;
+          var hasAny = BRANCH_CODES.some(function (c) { return !!state.cardResult[c]; });
+          if (hasAny) toast('Ditemukan hasil tersimpan untuk tanggal ini (sesi sebelumnya).', 'warning');
+        }
+      } catch (e) { /* abaikan */ }
+      renderCards();
+      renderResults();
+    }
+
+    init();
+  </script>
+</body>
+</html>
