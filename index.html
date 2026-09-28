@@ -209,6 +209,12 @@
       box-shadow: 0 6px 16px rgba(244,114,182,0.28);
     }
     .download-btn:disabled { opacity: .35; cursor: not-allowed; box-shadow: none; }
+    .send-btn {
+      margin-left: 8px; padding: 11px 20px; border: none; border-radius: 10px;
+      background: var(--success); color: white; font-weight: 700; font-size: 13px;
+      box-shadow: 0 6px 16px rgba(16,185,129,0.28);
+    }
+    .send-btn:disabled { opacity: .35; cursor: not-allowed; box-shadow: none; }
 
     .accordion-item { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
     .accordion-head {
@@ -310,6 +316,7 @@
         <h2 style="margin:0;">📊 Hasil Verifikasi</h2>
         <span class="rs-count mono" id="rs-count"></span>
         <button class="download-btn" id="btn-download" disabled>⬇️ Download XLSX Final</button>
+        <button class="send-btn" id="btn-send-branches" disabled>📧 Kirim ke Cabang</button>
       </div>
       <div id="results-body">
         <div class="empty-state">Belum ada hasil. Upload 16 file lalu klik "Proses Semua".</div>
@@ -338,6 +345,18 @@
       <div class="modal-actions">
         <button id="clear-cancel">Batal</button>
         <button class="primary" id="clear-confirm" style="background:#EF4444;">Ya, Hapus Semua</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Send to branches confirmation modal -->
+  <div class="modal-backdrop" id="send-modal-backdrop">
+    <div class="modal">
+      <h3>📧 Kirim ke Semua Cabang</h3>
+      <p>Ini akan mengirim <b>email berisi lampiran Excel</b> (data cabangnya sendiri saja, bukan gabungan 8 cabang) ke alamat email tiap cabang yang tersimpan di Kode.gs. Cabang yang belum <b>Verified</b> otomatis dilewati, tidak ikut dikirim. Email yang sudah terkirim <b>tidak bisa ditarik kembali</b>. Yakin mau lanjut?</p>
+      <div class="modal-actions">
+        <button id="send-cancel">Batal</button>
+        <button class="primary" id="send-confirm" style="background:#10B981;">Ya, Kirim Sekarang</button>
       </div>
     </div>
   </div>
@@ -371,6 +390,7 @@
       files: {},          // key: "pi_1" -> File object
       cardStatus: {},      // key: "PI" -> 'pending'|'parsing'|'uploading'|'filling'|'verified'|'mismatch'|'error'
       cardResult: {},       // key: "PI" -> result object from processBranch
+      emailResult: {},      // key: "PI" -> result object from sendAllBranchEmails (per cabang)
       masterSpreadsheetId: null,
       processing: false
     };
@@ -393,6 +413,10 @@
       resultsBody: document.getElementById('results-body'),
       rsCount: document.getElementById('rs-count'),
       btnDownload: document.getElementById('btn-download'),
+      btnSendBranches: document.getElementById('btn-send-branches'),
+      sendModalBackdrop: document.getElementById('send-modal-backdrop'),
+      sendCancel: document.getElementById('send-cancel'),
+      sendConfirm: document.getElementById('send-confirm'),
       modalBackdrop: document.getElementById('modal-backdrop'),
       cfgInput: document.getElementById('cfg-input'),
       cfgSave: document.getElementById('cfg-save'),
@@ -415,6 +439,7 @@
       setupConfigModal();
       setupSyncRates();
       setupClearTxModal();
+      setupSendBranchesModal();
       setupDarkMode();
       loadConfig();
       loadDraftState();
@@ -554,6 +579,7 @@
             delete state.cardResult[c];
           });
           state.files = {};
+          state.emailResult = {};
           renderCards();
           renderFileList();
           renderResults();
@@ -563,6 +589,50 @@
           el.clearConfirm.textContent = 'Ya, Hapus Semua';
           toast('Error: ' + err, 'error');
         });
+      });
+    }
+
+    // ==========================================================================
+    // KIRIM KE CABANG (email lampiran Excel per-cabang, HANYA kalau ke-8 cabang Verified)
+    // ==========================================================================
+    function setupSendBranchesModal() {
+      el.btnSendBranches.addEventListener('click', function () {
+        if (el.btnSendBranches.disabled) return;
+        el.sendModalBackdrop.classList.add('show');
+      });
+      el.sendCancel.addEventListener('click', function () {
+        el.sendModalBackdrop.classList.remove('show');
+      });
+      el.sendModalBackdrop.addEventListener('click', function (e) {
+        if (e.target === el.sendModalBackdrop) el.sendModalBackdrop.classList.remove('show');
+      });
+      el.sendConfirm.addEventListener('click', function () {
+        el.sendModalBackdrop.classList.remove('show');
+        sendToBranches();
+      });
+    }
+
+    function sendToBranches() {
+      el.btnSendBranches.disabled = true;
+      el.btnSendBranches.textContent = '⏳ Mengirim...';
+      var dateStr = isoToDDMMYYYY_(el.dateInput.value);
+      runGS('sendAllBranchEmails', { dateStr: dateStr }).then(function (res) {
+        var results = (res && res.results) || [];
+        results.forEach(function (r) { state.emailResult[r.branchCode] = r; });
+        renderResults();
+        var sentCount = results.filter(function (r) { return r.ok; }).length;
+        if (res && res.ok && sentCount === results.length && results.length > 0) {
+          toast('📧 Semua email berhasil terkirim ke ' + sentCount + ' cabang.', 'success');
+        } else {
+          var skippedOrFailed = results.filter(function (r) { return !r.ok; });
+          toast(sentCount + '/' + results.length + ' terkirim. Cek detail per cabang: ' +
+            skippedOrFailed.map(function (r) { return r.branchCode; }).join(', '), 'warning');
+        }
+      }).catch(function (err) {
+        toast('Error: ' + err, 'error');
+      }).then(function () {
+        el.btnSendBranches.textContent = '📧 Kirim ke Cabang';
+        renderResults(); // hitung ulang disabled state (boleh coba kirim ulang kalau ada yang gagal)
       });
     }
 
@@ -775,6 +845,7 @@
       card.querySelector('[data-action="reset"]').addEventListener('click', function () {
         state.cardStatus[code] = 'pending';
         delete state.cardResult[code];
+        delete state.emailResult[code];
         delete state.files[code.toLowerCase() + '_1'];
         delete state.files[code.toLowerCase() + '_2'];
         updateCard(code);
@@ -886,12 +957,14 @@
         el.resultsBody.innerHTML = '<div class="empty-state">Belum ada hasil. Upload 16 file lalu klik "Proses Semua".</div>';
         el.rsCount.textContent = '';
         el.btnDownload.disabled = true;
+        el.btnSendBranches.disabled = true;
         return;
       }
 
       var okCount = codesWithResult.filter(function (c) { return state.cardResult[c].ok; }).length;
       el.rsCount.textContent = okCount + ' / 8 verified';
       el.btnDownload.disabled = !(okCount === 8 && codesWithResult.length === 8);
+      el.btnSendBranches.disabled = !(okCount === 8 && codesWithResult.length === 8);
 
       el.resultsBody.innerHTML = '';
       BRANCH_CODES.forEach(function (code) {
@@ -904,6 +977,13 @@
         var warningsHtml = '';
         if (r.warnings && r.warnings.length > 0) {
           warningsHtml = r.warnings.map(function (w) { return '<div class="warn-line">⚠️ ' + escapeHtml_(w) + '</div>'; }).join('');
+        }
+
+        var emailHtml = '';
+        var er = state.emailResult[code];
+        if (er) {
+          emailHtml = '<div class="' + (er.ok ? 'badge-ok' : 'warn-line') + '" style="margin-top:6px;">' +
+            (er.ok ? '📧 ' : '⚠️ ') + escapeHtml_(er.message || '') + '</div>';
         }
 
         item.innerHTML =
@@ -919,6 +999,7 @@
               '<tr><td>Refleksi</td><td>' + fmtNum_(r.targetRefleksi) + '</td><td>' + fmtNum_(r.actualRefleksi) + '</td><td>' + fmtNum_(r.diffRefleksi) + '</td></tr>' +
             '</table>' +
             warningsHtml +
+            emailHtml +
           '</div>';
 
         item.querySelector('.accordion-head').addEventListener('click', function () {
@@ -1029,6 +1110,7 @@
         state.cardStatus[c] = 'pending';
         delete state.cardResult[c];
       });
+      state.emailResult = {};
       try {
         var raw = localStorage.getItem(draftKey_());
         if (raw) {
